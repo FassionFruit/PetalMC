@@ -1,3 +1,4 @@
+
 pub trait RandomSource {
     fn next_u64(&mut self) -> u64;
 
@@ -92,5 +93,29 @@ impl RandomSource for LegacyRandomSource {
                 return value;
             }
         }
+    }
+
+    fn next_f64(&mut self) -> f64 {
+        LegacyRandomSource::next_f64(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LegacyRandomSource, RandomSource};
+
+    #[test]
+    fn legacy_next_f64_matches_java_random() {
+        let mut random = LegacyRandomSource::new(0);
+
+        let expected: [f64; 3] = [
+            0.730967787376657,
+            0.24053641567148587,
+            0.6374174253501083,
+        ];
+
+        expected.into_iter().for_each(|expected| {
+            assert_eq!(random.next_f64().to_bits(), expected.to_bits());
+        });
     }
 }
