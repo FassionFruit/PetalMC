@@ -1,2 +1,2 @@
-pub mod worldgen;
 pub mod density;
+pub mod worldgen;

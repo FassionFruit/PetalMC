@@ -65,10 +65,18 @@ impl DensityFunction {
                     UnaryOp::Cube => value * value * value,
                     UnaryOp::Sqrt => value.max(0.0).sqrt(),
                     UnaryOp::HalfNegative => {
-                        if value < 0.0 { value * 0.5 } else { value }
+                        if value < 0.0 {
+                            value * 0.5
+                        } else {
+                            value
+                        }
                     }
                     UnaryOp::QuarterNegative => {
-                        if value < 0.0 { value * 0.25 } else { value }
+                        if value < 0.0 {
+                            value * 0.25
+                        } else {
+                            value
+                        }
                     }
                     UnaryOp::Reciprocal => 1.0 / value,
                     UnaryOp::Negate => -value,
@@ -93,9 +101,7 @@ impl DensityFunction {
                 }
             }
 
-            Self::Clamp { input, min, max } => {
-                input.sample(x, y, z).clamp(*min, *max)
-            }
+            Self::Clamp { input, min, max } => input.sample(x, y, z).clamp(*min, *max),
 
             Self::Lerp {
                 alpha,
@@ -111,11 +117,7 @@ impl DensityFunction {
         }
     }
 
-    pub fn sample_volume(
-        &self,
-        volume: &DensityVolume,
-        output: &mut DensityBuffer,
-    ) {
+    pub fn sample_volume(&self, volume: &DensityVolume, output: &mut DensityBuffer) {
         let required = volume.len();
 
         if output.values.len() != required {
@@ -132,10 +134,7 @@ impl DensityFunction {
                 for y in 0..volume.size_y {
                     let block_y = volume.block_y(y);
 
-                    output.set(
-                        base_index + y,
-                        self.sample(block_x, block_y, block_z),
-                    );
+                    output.set(base_index + y, self.sample(block_x, block_y, block_z));
                 }
             }
         }

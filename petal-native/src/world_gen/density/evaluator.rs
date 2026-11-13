@@ -98,9 +98,7 @@ pub fn evaluate(
 
             DensityOp::Squeeze => squeeze(input(node.a)?),
 
-            DensityOp::Clamp => {
-                input(node.a)?.clamp(node.p0, node.p1)
-            }
+            DensityOp::Clamp => input(node.a)?.clamp(node.p0, node.p1),
         };
 
         values.push(value);
@@ -153,7 +151,7 @@ pub fn sample_volume(
                     world_z as f64,
                     &mut values,
                 )
-                    .map_err(|_| DensityError::InvalidNode)? as f32;
+                .map_err(|_| DensityError::InvalidNode)? as f32;
             }
         }
     }

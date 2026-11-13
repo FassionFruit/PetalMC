@@ -1,4 +1,3 @@
-
 #[derive(Clone, Debug)]
 pub struct DensityBuffer {
     pub values: Vec<f32>,

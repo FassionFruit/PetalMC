@@ -1,14 +1,14 @@
-pub mod volume;
 pub mod buffer;
+pub mod evaluator;
 pub mod function;
 pub mod graph;
-pub mod evaluator;
+pub mod volume;
 
 pub use buffer::*;
-pub use function::*;
-pub use volume::*;
-pub use graph::*;
 pub use evaluator::*;
+pub use function::*;
+pub use graph::*;
+pub use volume::*;
 
 #[cfg(test)]
 mod tests {
@@ -32,15 +32,7 @@ mod tests {
 
         let mut values = Vec::new();
 
-        let result = evaluator::evaluate(
-            &nodes,
-            2,
-            0.0,
-            0.0,
-            0.0,
-            &mut values,
-        )
-            .unwrap();
+        let result = evaluator::evaluate(&nodes, 2, 0.0, 0.0, 0.0, &mut values).unwrap();
 
         assert_eq!(result, 30.0);
     }
@@ -59,30 +51,8 @@ mod tests {
 
         let mut output = [0.0; 8];
 
-        evaluator::sample_volume(
-            &nodes,
-            0,
-            0,
-            0,
-            0,
-            2,
-            2,
-            2,
-            1,
-            1,
-            1,
-            &mut output,
-        )
-            .unwrap();
+        evaluator::sample_volume(&nodes, 0, 0, 0, 0, 2, 2, 2, 1, 1, 1, &mut output).unwrap();
 
-        assert_eq!(
-            output,
-            [
-                0.0, 1.0,
-                0.0, 1.0,
-                0.0, 1.0,
-                0.0, 1.0,
-            ]
-        );
+        assert_eq!(output, [0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0,]);
     }
 }

@@ -1,5 +1,5 @@
+use crate::world_gen::density::{DensityNode, sample_volume};
 use std::slice;
-use crate::worldgen::density::{sample_volume, DensityNode};
 
 const SUCCESS: i32 = 0;
 const NULL_POINTER: i32 = 1;
@@ -50,17 +50,7 @@ pub unsafe extern "C" fn petal_density_sample(
     let output = slice::from_raw_parts_mut(output, output_len);
 
     match sample_volume(
-        nodes,
-        root,
-        origin_x,
-        origin_y,
-        origin_z,
-        size_x,
-        size_y,
-        size_z,
-        step_x,
-        step_y,
-        step_z,
+        nodes, root, origin_x, origin_y, origin_z, size_x, size_y, size_z, step_x, step_y, step_z,
         output,
     ) {
         Ok(()) => SUCCESS,
