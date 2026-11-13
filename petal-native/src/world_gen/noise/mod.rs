@@ -3,6 +3,7 @@ pub mod normal;
 pub mod perlin;
 pub mod simplex;
 pub mod stack;
+pub mod smeared;
 
 pub use gradient::*;
 pub use normal::*;

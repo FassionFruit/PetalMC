@@ -1,6 +1,7 @@
-use super::perlin::{PerlinNoise, SmearedPerlinNoise};
+use super::perlin::{PerlinNoise};
 use crate::world_gen::density::DensityVolume;
 use crate::world_gen::noise::SimplexNoise;
+use crate::world_gen::noise::smeared::SmearedPerlinNoise;
 use std::sync::Arc;
 
 pub trait Noise: Send + Sync {
@@ -98,7 +99,14 @@ impl Noise for SmearedPerlinNoise {
         y_scale: f64,
         amplitude: f32,
     ) {
-        SmearedPerlinNoise::add_to_volume(self, buffer, volume, xz_scale, y_scale, amplitude);
+        SmearedPerlinNoise::add_to_volume(
+            self,
+            buffer,
+            volume,
+            xz_scale,
+            y_scale,
+            amplitude,
+        );
     }
 }
 
