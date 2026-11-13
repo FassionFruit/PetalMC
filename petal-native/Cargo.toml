@@ -4,6 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [lib]
-crate-type = ["cdylib"]
+name = "petal_native"
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
