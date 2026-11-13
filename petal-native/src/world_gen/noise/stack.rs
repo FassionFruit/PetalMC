@@ -9,6 +9,34 @@ pub trait Noise: Send + Sync {
     fn get3(&self, x: f64, y: f64, z: f64) -> f32;
 
     fn range(&self) -> [f32; 2];
+
+    fn add_to_volume(
+        &self,
+        buffer: &mut [f32],
+        volume: &DensityVolume,
+        xz_scale: f64,
+        y_scale: f64,
+        amplitude: f32,
+    ) {
+        assert_eq!(buffer.len(), volume.len());
+
+        let mut index = 0;
+
+        for z in 0..volume.size_z {
+            let z = f64::from(volume.block_z(z)) * xz_scale;
+
+            for x in 0..volume.size_x {
+                let x = f64::from(volume.block_x(x)) * xz_scale;
+
+                for y in 0..volume.size_y {
+                    let y = f64::from(volume.block_y(y)) * y_scale;
+
+                    buffer[index] += amplitude * self.get3(x, y, z);
+                    index += 1;
+                }
+            }
+        }
+    }
 }
 
 impl Noise for PerlinNoise {
@@ -23,6 +51,29 @@ impl Noise for PerlinNoise {
     fn range(&self) -> [f32; 2] {
         [-2.0, 2.0]
     }
+
+    fn add_to_volume(
+        &self,
+        buffer: &mut [f32],
+        volume: &DensityVolume,
+        xz_scale: f64,
+        y_scale: f64,
+        amplitude: f32,
+    ) {
+        PerlinNoise::add_to_volume(
+            self,
+            buffer,
+            volume.size_x,
+            volume.size_y,
+            volume.size_z,
+            volume.min_x,
+            volume.min_y,
+            volume.min_z,
+            xz_scale,
+            y_scale,
+            amplitude,
+        );
+    }
 }
 
 impl Noise for SmearedPerlinNoise {
@@ -35,7 +86,19 @@ impl Noise for SmearedPerlinNoise {
     }
 
     fn range(&self) -> [f32; 2] {
-        [-2.0, 2.0]
+        let range = self.fudge_y_scale.abs() as f32 + 2.0;
+        [-range, range]
+    }
+
+    fn add_to_volume(
+        &self,
+        buffer: &mut [f32],
+        volume: &DensityVolume,
+        xz_scale: f64,
+        y_scale: f64,
+        amplitude: f32,
+    ) {
+        SmearedPerlinNoise::add_to_volume(self, buffer, volume, xz_scale, y_scale, amplitude);
     }
 }
 
@@ -106,21 +169,14 @@ impl NoiseStack {
     ) {
         assert_eq!(buffer.len(), volume.len());
 
-        let mut index = 0;
-
-        for z in 0..volume.size_z {
-            let z = f64::from(volume.block_z(z)) * xz_scale;
-
-            for x in 0..volume.size_x {
-                let x = f64::from(volume.block_x(x)) * xz_scale;
-
-                for y in 0..volume.size_y {
-                    let y = f64::from(volume.block_y(y)) * y_scale;
-
-                    buffer[index] += amplitude * self.get3(x, y, z);
-                    index += 1;
-                }
-            }
+        for layer in &self.layers {
+            layer.noise.add_to_volume(
+                buffer,
+                volume,
+                xz_scale * layer.frequency,
+                y_scale * layer.frequency,
+                amplitude * layer.amplitude,
+            );
         }
     }
 }
