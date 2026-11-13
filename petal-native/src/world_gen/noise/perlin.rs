@@ -1,178 +1,202 @@
+use super::gradient::{GRADIENTS, GradientTable, wrap};
 use crate::world_gen::random::RandomSource;
 
-use super::ImprovedNoise;
+const PERLIN_GRADIENTS: [[f32; 3]; 16] = [
+    [1.0, 1.0, 0.0],
+    [-1.0, 1.0, 0.0],
+    [1.0, -1.0, 0.0],
+    [-1.0, -1.0, 0.0],
+    [1.0, 0.0, 1.0],
+    [-1.0, 0.0, 1.0],
+    [1.0, 0.0, -1.0],
+    [-1.0, 0.0, -1.0],
+    [0.0, 1.0, 1.0],
+    [0.0, -1.0, 1.0],
+    [0.0, 1.0, -1.0],
+    [0.0, -1.0, -1.0],
+    [1.0, 1.0, 0.0],
+    [0.0, -1.0, 1.0],
+    [-1.0, 1.0, 0.0],
+    [0.0, -1.0, -1.0],
+];
 
+#[derive(Clone, Debug)]
 pub struct PerlinNoise {
-    first_octave: i32,
-    amplitudes: Vec<f64>,
-    noise_levels: Vec<Option<ImprovedNoise>>,
-    lowest_freq_input_factor: f64,
-    lowest_freq_value_factor: f64,
-    max_value: f64,
+    table: GradientTable,
 }
 
 impl PerlinNoise {
-    pub fn new_legacy(
-        random: &mut impl RandomSource,
-        first_octave: i32,
-        amplitudes: Vec<f64>,
-    ) -> Self {
-        let count = amplitudes.len();
-
-        let mut noise_levels: Vec<Option<ImprovedNoise>> =
-            std::iter::repeat_with(|| None).take(count).collect();
-
-        for index in (0..count).rev() {
-            if amplitudes[index] != 0.0 {
-                noise_levels[index] = Some(ImprovedNoise::new(random));
-            } else {
-                Self::skip_octave(random);
-            }
-        }
-
-        Self::from_levels(first_octave, amplitudes, noise_levels)
-    }
-
-    pub fn from_levels(
-        first_octave: i32,
-        amplitudes: Vec<f64>,
-        noise_levels: Vec<Option<ImprovedNoise>>,
-    ) -> Self {
-        assert_eq!(amplitudes.len(), noise_levels.len());
-
-        let count = amplitudes.len();
-
-        let lowest_freq_input_factor = 2.0_f64.powi(first_octave);
-        let lowest_freq_value_factor =
-            2.0_f64.powi(count as i32 - 1) / (2.0_f64.powi(count as i32) - 1.0);
-
-        let max_value = amplitudes
-            .iter()
-            .map(|amplitude| amplitude.abs())
-            .sum::<f64>()
-            * lowest_freq_value_factor;
-
+    pub fn new(random: &mut impl RandomSource) -> Self {
         Self {
-            first_octave,
-            amplitudes,
-            noise_levels,
-            lowest_freq_input_factor,
-            lowest_freq_value_factor,
-            max_value,
+            table: GradientTable::new(random, 256.0),
         }
     }
 
-    pub fn get_value(&self, x: f64, y: f64, z: f64) -> f64 {
-        self.sample(x, y, z, 0.0, 0.0, false)
+    pub fn table(&self) -> &GradientTable {
+        &self.table
     }
 
-    pub fn sample(
-        &self,
-        x: f64,
-        y: f64,
-        z: f64,
-        y_scale: f64,
-        y_max: f64,
-        use_origin: bool,
-    ) -> f64 {
-        let mut input_factor = self.lowest_freq_input_factor;
-        let mut value_factor = self.lowest_freq_value_factor;
-        let mut result = 0.0;
-
-        for (index, noise) in self.noise_levels.iter().enumerate() {
-            if let Some(noise) = noise {
-                let sample_x = Self::wrap(x * input_factor);
-                let sample_y = Self::wrap(y * input_factor);
-                let sample_z = Self::wrap(z * input_factor);
-
-                let value = if use_origin {
-                    noise.noise_with_y_scale(
-                        sample_x,
-                        sample_y,
-                        sample_z,
-                        y_scale * input_factor,
-                        y_max * input_factor,
-                    )
-                } else {
-                    noise.noise(sample_x, sample_y, sample_z)
-                };
-
-                result += self.amplitudes[index] * value * value_factor;
-            }
-
-            input_factor *= 2.0;
-            value_factor *= 0.5;
-        }
-
-        result
+    pub fn get2(&self, x: f64, z: f64) -> f32 {
+        self.get3(wrap(x), 0.0, wrap(z))
     }
 
-    pub fn max_value(&self) -> f64 {
-        self.max_value
+    pub fn get3(&self, x: f64, y: f64, z: f64) -> f32 {
+        let (cell, relative) = self.coordinates([x, y, z]);
+        let point = relative.map(|value| value as f32);
+
+        let gradients = self.gradients(cell);
+
+        let values = std::array::from_fn(|i| {
+            let gradient = gradients[i];
+
+            gradient[0] * (point[0] - (i & 1) as f32)
+                + gradient[1] * (point[1] - ((i >> 1) & 1) as f32)
+                + gradient[2] * (point[2] - ((i >> 2) & 1) as f32)
+        });
+
+        lerp3(
+            [
+                smoothstep(point[0]),
+                smoothstep(point[1]),
+                smoothstep(point[2]),
+            ],
+            values,
+        )
     }
 
-    pub fn first_octave(&self) -> i32 {
-        self.first_octave
+    fn coordinates(&self, point: [f64; 3]) -> ([i32; 3], [f64; 3]) {
+        let offsets = self.table.offsets();
+
+        let shifted = std::array::from_fn(|i| wrap(point[i]) + offsets[i]);
+
+        let cell = shifted.map(|value| value.floor() as i32);
+
+        let relative = std::array::from_fn(|i| shifted[i] - f64::from(cell[i]));
+
+        (cell, relative)
     }
 
-    pub fn amplitudes(&self) -> &[f64] {
-        &self.amplitudes
-    }
+    fn gradients(&self, cell: [i32; 3]) -> [[f32; 3]; 8] {
+        let p = self.table.permute(cell[0]);
+        let q = self.table.permute(cell[0].wrapping_add(1));
 
-    pub fn get_octave_noise(&self, octave: i32) -> Option<&ImprovedNoise> {
-        let index = octave - self.first_octave;
+        let lower = self.table.permute(p.wrapping_add(cell[1]));
+        let upper = self.table.permute(p.wrapping_add(cell[1]).wrapping_add(1));
 
-        if index < 0 {
-            return None;
-        }
+        let lower_x = self.table.permute(q.wrapping_add(cell[1]));
+        let upper_x = self.table.permute(q.wrapping_add(cell[1]).wrapping_add(1));
 
-        self.noise_levels.get(index as usize)?.as_ref()
-    }
+        let rows = [
+            lower, lower_x, upper, upper_x, lower, lower_x, upper, upper_x,
+        ];
 
-    pub fn wrap(value: f64) -> f64 {
-        let wrapped = value - (value / 33_554_432.0 + 0.5).floor() * 33_554_432.0;
-        wrapped
-    }
+        std::array::from_fn(|i| {
+            let index = self
+                .table
+                .permute(rows[i].wrapping_add(cell[2]).wrapping_add((i / 4) as i32))
+                & 15;
 
-    fn skip_octave(random: &mut impl RandomSource) {
-        for _ in 0..262 {
-            random.next_u32();
-        }
+            PERLIN_GRADIENTS[index as usize]
+        })
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::world_gen::random::LegacyRandomSource;
+#[inline]
+fn smoothstep(value: f32) -> f32 {
+    value * value * value * (value * (value * 6.0 - 15.0) + 10.0)
+}
 
-    #[test]
-    fn perlin_noise_is_deterministic() {
-        let amplitudes = vec![1.0, 0.5, 0.25];
+#[inline]
+fn lerp(delta: f32, start: f32, end: f32) -> f32 {
+    start + delta * (end - start)
+}
 
-        let mut random_a = LegacyRandomSource::new(1234);
-        let mut random_b = LegacyRandomSource::new(1234);
+#[inline]
+fn lerp2(a: f32, b: f32, values: [f32; 4]) -> f32 {
+    lerp(
+        b,
+        lerp(a, values[0], values[1]),
+        lerp(a, values[2], values[3]),
+    )
+}
 
-        let noise_a = PerlinNoise::new_legacy(&mut random_a, -2, amplitudes.clone());
+#[inline]
+fn lerp3(fade: [f32; 3], values: [f32; 8]) -> f32 {
+    lerp(
+        fade[2],
+        lerp2(
+            fade[0],
+            fade[1],
+            [values[0], values[1], values[2], values[3]],
+        ),
+        lerp2(
+            fade[0],
+            fade[1],
+            [values[4], values[5], values[6], values[7]],
+        ),
+    )
+}
 
-        let noise_b = PerlinNoise::new_legacy(&mut random_b, -2, amplitudes);
+#[derive(Clone, Debug)]
+pub struct SmearedPerlinNoise {
+    base: PerlinNoise,
+    fudge_y_scale: f64,
+}
 
-        assert_eq!(
-            noise_a.get_value(10.0, 20.0, 30.0),
-            noise_b.get_value(10.0, 20.0, 30.0)
-        );
-    }
-
-    #[test]
-    fn perlin_noise_is_finite() {
-        let mut random = LegacyRandomSource::new(5678);
-
-        let noise = PerlinNoise::new_legacy(&mut random, -2, vec![1.0, 0.5, 0.25]);
-
-        for x in -10..10 {
-            let value = noise.get_value(x as f64, x as f64 * 2.0, x as f64 * 3.0);
-
-            assert!(value.is_finite());
+impl SmearedPerlinNoise {
+    pub fn new(random: &mut impl RandomSource, fudge_y_scale: f64) -> Self {
+        Self {
+            base: PerlinNoise::new(random),
+            fudge_y_scale,
         }
     }
+
+    pub fn get2(&self, x: f64, z: f64) -> f32 {
+        self.get3(wrap(x), 0.0, wrap(z))
+    }
+
+    pub fn get3(&self, x: f64, y: f64, z: f64) -> f32 {
+        let (cell, relative) = self.base.coordinates([x, y, z]);
+
+        let fudge = compute_fudge_y(y, relative[1], self.fudge_y_scale);
+
+        let point = [
+            relative[0] as f32,
+            (relative[1] - fudge) as f32,
+            relative[2] as f32,
+        ];
+
+        let gradients = self.base.gradients(cell);
+
+        let values = std::array::from_fn(|i| {
+            let gradient = gradients[i];
+
+            gradient[0] * (point[0] - (i & 1) as f32)
+                + gradient[1] * (point[1] - ((i >> 1) & 1) as f32)
+                + gradient[2] * (point[2] - ((i >> 2) & 1) as f32)
+        });
+
+        lerp3(
+            [
+                smoothstep(point[0]),
+                smoothstep(relative[1] as f32),
+                smoothstep(point[2]),
+            ],
+            values,
+        )
+    }
+
+    pub fn table(&self) -> &GradientTable {
+        self.base.table()
+    }
+}
+
+fn compute_fudge_y(input_y: f64, relative_y: f64, scale: f64) -> f64 {
+    let limited_y = if input_y >= 0.0 && input_y < relative_y {
+        input_y
+    } else {
+        relative_y
+    };
+
+    ((limited_y / scale + f64::from(1e-7_f32)).floor()) * scale
 }
