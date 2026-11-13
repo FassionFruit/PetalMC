@@ -7,6 +7,8 @@ pub struct SimplexNoise {
 }
 
 impl SimplexNoise {
+    pub const STANDARD_DEVIATION: f64 = 0.42544;
+
     pub fn new(random: &mut impl RandomSource) -> Self {
         Self::with_skipped_offsets(random, false)
     }
